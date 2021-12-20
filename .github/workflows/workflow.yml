@@ -27,6 +27,7 @@ jobs:
             password: ${{ secrets.AZURE_PASSWORD }}
         - run: |
             docker build . -t hello-world:${{ github.sha }}
+            docker tag hello-world:${{ github.sha }} testgroupregistry.azurecr.io/samples/hello-world:${{ github.sha }}
             docker push testgroupregistry.azurecr.io/samples/hello-world:${{ github.sha }}
 
         - name: 'Deploy to Azure Container Instances'
