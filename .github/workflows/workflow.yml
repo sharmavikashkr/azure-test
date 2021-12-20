@@ -1,0 +1,40 @@
+on:
+  push:
+    branches:
+      - master
+name: Build & Deploy to ACI
+jobs:
+    build-and-deploy:
+        runs-on: ubuntu-latest
+        steps:
+        
+        - name: 'Checkout GitHub Action'
+          uses: actions/checkout@master
+          
+        - name: 'Login to Azure'
+          uses: azure/login@v1
+          with:
+            creds: ${{ secrets.AZURE_CREDENTIALS }}
+        
+        - name: 'Build & Push'
+          uses: azure/docker-login@v1
+          with:
+            login-server: testgroupregistry.azurecr.io
+            username: ${{ secrets.AZURE_USER }}
+            password: ${{ secrets.AZURE_PASSWORD }}
+        - run: |
+            docker build . -t hello-world:${{ github.sha }}
+            docker push testgroupregistry.azurecr.io/samples/hello-world:${{ github.sha }}
+
+        - name: 'Deploy to Azure Container Instances'
+          uses: 'azure/aci-deploy@v1'
+          with:
+            resource-group: TestGroup
+            dns-name-label: helloworlddevtest
+            image: testgroupregistry.azurecr.io/samples/hello-world:${{ github.sha }}
+            cpu: 1
+            memory: 1
+            registry-username: ${{ secrets.AZURE_USER }}
+            registry-password: ${{ secrets.AZURE_PASSWORD }}
+            name: helloworlddev
+            location: 'central india'
