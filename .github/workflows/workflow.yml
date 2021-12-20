@@ -15,6 +15,9 @@ jobs:
           uses: azure/login@v1
           with:
             creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+        - name: 'Create Azure Registery'
+          run: az acr create --resource-group TestGroup --name testgroupregistry --sku Basic
         
         - name: 'Build & Push'
           uses: azure/docker-login@v1
