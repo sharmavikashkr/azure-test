@@ -1,32 +1,8 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo_text.svg" width="320" alt="Nest Logo" /></a>
-</p>
-
-[travis-image]: https://api.travis-ci.org/nestjs/nest.svg?branch=master
-[travis-url]: https://travis-ci.org/nestjs/nest
-[linux-image]: https://img.shields.io/travis/nestjs/nest/master.svg?label=linux
-[linux-url]: https://travis-ci.org/nestjs/nest
-  
-  <p align="center">A progressive <a href="http://nodejs.org" target="blank">Node.js</a> framework for building efficient and scalable server-side applications, heavily inspired by <a href="https://angular.io" target="blank">Angular</a>.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore"><img src="https://img.shields.io/npm/dm/@nestjs/core.svg" alt="NPM Downloads" /></a>
-<a href="https://travis-ci.org/nestjs/nest"><img src="https://api.travis-ci.org/nestjs/nest.svg?branch=master" alt="Travis" /></a>
-<a href="https://travis-ci.org/nestjs/nest"><img src="https://img.shields.io/travis/nestjs/nest/master.svg?label=linux" alt="Linux" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#5" alt="Coverage" /></a>
-<a href="https://gitter.im/nestjs/nestjs?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=body_badge"><img src="https://badges.gitter.im/nestjs/nestjs.svg" alt="Gitter" /></a>
-<a href="https://opencollective.com/nest#backer"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec"><img src="https://img.shields.io/badge/Donate-PayPal-dc3d53.svg"/></a>
-  <a href="https://twitter.com/nestframework"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
-
 ## Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+A simple application developed in [Nest](https://github.com/nestjs/nest) framework to demonstrate deployment to Azure in 2 ways:
+1. By using Azure Cli and [Azure Resource manager](https://docs.microsoft.com/en-us/azure/azure-resource-manager/management/overview) templates.
+2. Though [Github Actions](https://github.com/features/actions) workflows.
 
 ## Installation
 
@@ -34,7 +10,7 @@
 $ npm install
 ```
 
-## Running the app
+## Running the app locally
 
 ```bash
 # development
@@ -42,34 +18,70 @@ $ npm run start
 
 # watch mode
 $ npm run start:dev
-
-# production mode
-$ npm run start:prod
 ```
 
-## Test
+## Running the app locally in Docker
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+# build docker image
+$ docker build -t hello-world:1.0.0 .
+# run
+$ docker run -p 80:80 hello-world:1.0.0
+# verify
+$ verify that the application is accessible at http://localhost/hello
 ```
 
-## Support
+## Create a service principal (To be done only once)
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+This is a common step before deploying though either ways discussed below.
 
-## Stay in touch
+1. Download Azure Cli and login to Azure using your tenant
+```bash
+$ az login --tenant <tenant_id>
+```
+2. Create a resource group
+```bash
+$ az group create -l centralindia -n TestGroup
+```
+3. Create a group scoped service principal. Save the generated JSON output securely.
+```bash
+$ groupId=$(az group show --name TestGroup --query id --output tsv)
+$ MSYS_NO_PATHCONV=1 az ad sp create-for-rbac --name TestApp --role contributor --scope $groupId --sdk-auth
+```
 
-- Author - [Kamil Myśliwiec](https://kamilmysliwiec.com)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+### Deploy to Azure using Azure Cli and Azure Resource manager templates
 
-## License
+Steps in details [here](https://medium.com/nerd-for-tech/deploy-an-application-in-azure-container-instances-aci-using-azure-resource-manager-arm-f678ee3de06e).
 
-  Nest is [MIT licensed](LICENSE).
+1. Login with service principal
+```bash
+$ az login — service-principal -u <client_id> -p <client_secret> --tenant <tenant_id>
+```
+2. Create a container registry
+```bash
+$ az acr create --resource-group TestGroup --name testgroupregistry --sku Basic
+```
+3. Build and push image to the registry
+```bash
+$ docker build . -t hello-world:1.0.0
+$ docker tag hello-world:1.0.0 testgroupregistry.azurecr.io/samples/hello-world:1.0.0
+$ az acr login --name testgroupregistry
+$ docker push testgroupregistry.azurecr.io/samples/hello-world:1.0.0
+```
+4. Create a container instance
+There is template file `infra/aci.bicep` which is a [Azure Resource Manager template](https://docs.microsoft.com/en-us/azure/azure-resource-manager/templates/overview) for creating Azure Container Instance. We will use it to create an ACI and deploy the docker image generated above.
+```bash
+$ az deployment group create --resource-group TestGroup --template-file infra/aci.bicep --parameters name=helloworlddev image=testgroupregistry.azurecr.io/samples/hello-world:1.0.0 registryServer=testgroupregistry.azurecr.io clientId=<client_id> clientSecret=<client_secret> dnsNameLabel=helloworlddevtest port=80
+```
+
+### Deploy to Azure using GitHub Actions
+
+Steps in details [here](https://medium.com/nerd-for-tech/deploy-an-application-in-azure-container-instances-aci-through-github-actions-df7144fcd67f).
+
+1. Store service pricipal credentials in your GitHub repo's secrets:
+```bash
+  AZURE_CREDENTIALS => <the service principal json generated above>
+  AZURE_USERNAME => <clientId of the service principal>
+  AZURE_PASSWORD => <clientSecret of the service principal>
+```
+2. The `.github/workflows/workflow.yml` takes care of creating the ACI and deployment on every push.
